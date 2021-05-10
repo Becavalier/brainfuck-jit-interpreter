@@ -19,7 +19,6 @@ void debugVec(std::vector<char> *vp) {
 void debugTape(char *arr, size_t len) {
   for (size_t i = 0; i < len; ++i) {
     std::cout << arr[i];
-    std::cout << 11;
   }
 }
 #endif
@@ -66,7 +65,8 @@ void bfInterpret(const char* program, bfState* state) {
         break;
       }
       case '.': {
-        if (!nskip) std::cout << *state->ptr;
+        if (!nskip) 
+          std::cout << *state->ptr;
         break;
       }
       case '[': {
@@ -116,5 +116,3 @@ int main(int argc, char** argv) {
   }
   return 0;
 }
-
-
