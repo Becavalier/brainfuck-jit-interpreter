@@ -29,7 +29,7 @@ def _thread_command(task, timeout):
 if __name__ == '__main__':
   print('\nBenchmark for %s seconds: (higher score is better)' % default_benchmark_time)
   exec_cmd('./interpreter ./bfs/FIB.bf', '.out_interpret')
-  exec_cmd('./interpreter ./bfs/FIB.bf', '.out_jit')
+  exec_cmd('./interpreter ./bfs/FIB.bf --jit', '.out_jit')
 
   # comparision.
   completedprocess = subprocess.run('wc -l .out_interpret .out_jit', shell=True, capture_output=True)

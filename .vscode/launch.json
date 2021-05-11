@@ -9,13 +9,12 @@
       "type": "cppdbg",
       "request": "launch",
       "program": "${workspaceFolder}/interpreter",
-      "args": ["./FIB.bf"],
+      "args": ["./bfs/SIM.bf", "--jit"],
       "stopAtEntry": true,
       "cwd": "${workspaceFolder}",
       "environment": [],
       "externalConsole": false,
       "MIMode": "lldb"
     }
-    
   ]
 }
