@@ -9,7 +9,13 @@
 #include <cmath>
 
 /**
- * This program can only be run on macOS 64bit.
+ * Some limitations of this program:
+ * 
+ * 1. No exception-handling support；
+ * 2. No thread-safe guaranteed;
+ * 3. The amount of continuous "+" and "-" showing up in the source code cannot exceed 255;
+ * 4. Only support macOS 64bit.
+ * 
  */
 
 #define ENABLE_DEBUG
@@ -42,7 +48,7 @@ void setupExecutableMem(std::vector<uint8_t>* machineCode) {
     -1, 
     0));
   if (mem == MAP_FAILED) {
-    std::cerr << "Can't allocate memory.\n"; 
+    std::cerr << "[error] Can't allocate memory.\n"; 
     std::exit(1);
   }
   for (size_t i = 0; i < machineCode->size(); ++i) {
