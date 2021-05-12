@@ -1,4 +1,48 @@
-mov rax, 0x7fffffffffa0
-add dword[rax], 0x9
-pop rax
-jmp rax
+
+_f:
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+inc rcx
+mov rax, 0x123456789
+cmp byte[rax], 0
+jz _f
+

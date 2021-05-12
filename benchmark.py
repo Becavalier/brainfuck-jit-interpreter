@@ -5,7 +5,7 @@ import sys
 import threading
 import os
 
-default_benchmark_time = 5
+default_benchmark_time = 10
 
 def exec_cmd(command, file_name, timeout=default_benchmark_time):
   try:

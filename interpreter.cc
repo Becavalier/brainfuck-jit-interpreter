@@ -24,9 +24,9 @@ void debugVec(std::vector<T> *vp) {
     std::cout << std::hex << static_cast<size_t>(*i) << std::endl;
   }
 }
-void debugTape(char *arr, size_t len) {
+void debugTape(unsigned char *arr, size_t len) {
   for (size_t i = 0; i < len; ++i) {
-    std::cout << arr[i];
+    std::cout << static_cast<int>(arr[i]);
   }
 }
 #endif
@@ -49,9 +49,9 @@ void setupExecutableMem(std::vector<uint8_t>* machineCode) {
     mem[i] = machineCode->at(i);
   }
 
-  // save the current %rip.
+  // save the current %rip (by PC-relative).
   asm(R"(
-    lea 0x7(%%rip), %%rax
+    lea 0x7(%%rip), %%rax 
     pushq %%rax
     movq %0, %%rax
     jmpq *%%rax
@@ -67,45 +67,163 @@ struct bfState {
   }
 };
 
+
 void bfJITCompile(std::vector<char>* program, bfState* state) {
   std::vector<uint8_t> machineCode {};
+  std::vector<size_t> jmpLocIndex {};
 
-  // code generation.
-  for (auto i = program->begin(); i != program->end(); ++i) {
+  // helpers.
+  auto _appendBytecode = [&](auto byteCode) {
+    machineCode.insert(machineCode.end(), byteCode.begin(), byteCode.end());
+  };
+
+  auto _resolvePtrAddr = [](auto ptrAddr) -> auto {
+    return std::vector<uint8_t> {
+      static_cast<uint8_t>(ptrAddr & 0xff),
+      static_cast<uint8_t>((ptrAddr & 0xff00) >> 8),
+      static_cast<uint8_t>((ptrAddr & 0xff0000) >> 16),
+      static_cast<uint8_t>((ptrAddr & 0xff000000) >> 24), 
+      static_cast<uint8_t>((ptrAddr & 0xff00000000) >> 32),
+      static_cast<uint8_t>((ptrAddr & 0xff0000000000) >> 40),
+      static_cast<uint8_t>((ptrAddr & 0xff000000000000) >> 48),
+      static_cast<uint8_t>((ptrAddr & 0xff00000000000000) >> 56), 
+    };
+  };
+
+  auto _resolveAddrDiff = [](auto addrDiff) -> auto {
+    return std::vector<uint8_t> {
+      static_cast<uint8_t>(addrDiff & 0xff),
+      static_cast<uint8_t>((addrDiff & 0xff00) >> 8),
+      static_cast<uint8_t>((addrDiff & 0xff0000) >> 16),
+      static_cast<uint8_t>((addrDiff & 0xff000000) >> 24),
+    };
+  };
+
+  // codegen.
+  for (auto tok = program->begin(); tok != program->end(); ++tok) {
+    size_t n = 0;
     auto ptrAddr = reinterpret_cast<size_t>(state->ptr);
-    switch(*i) {
+
+    switch(*tok) {
       case '+': {
         /**
-         * movabs addr, %rax
-         * addl $0x1, (%rax)
-         * pop %rax
-         * jmpq %rax  # return to normal execution.
+          movabs [slot], %rax
+          addb $0x1, (%rax)
          */
-        uint8_t byteCodes[] = { 
-          0x48, 
-          0xb8, 
-          static_cast<uint8_t>(ptrAddr & 0xff),
-          static_cast<uint8_t>((ptrAddr & 0xff00) >> 8),
-          static_cast<uint8_t>((ptrAddr & 0xff0000) >> 16),
-          static_cast<uint8_t>((ptrAddr & 0xff000000) >> 24), 
-          static_cast<uint8_t>((ptrAddr & 0xff00000000) >> 32),
-          static_cast<uint8_t>((ptrAddr & 0xff0000000000) >> 40),
-          static_cast<uint8_t>((ptrAddr & 0xff000000000000) >> 48),
-          static_cast<uint8_t>((ptrAddr & 0xff00000000000000) >> 56), 
-          0x80,
-          0x0,
-          0x1,
-          0x58,
-          0xff,
-          0xe0,
+        for (n = 0; *tok == '+'; ++n, ++tok);
+        const auto ptrBytes = _resolvePtrAddr(ptrAddr);
+        std::vector<uint8_t> byteCode { 
+          0x48, 0xb8, /* mem slot */ 
+          0x80, 0x0, static_cast<uint8_t>(n),
         };
-        machineCode.insert(
-          machineCode.end(), 
-          byteCodes, 
-          byteCodes + sizeof(byteCodes));
+        byteCode.insert(byteCode.begin() + 2, ptrBytes.begin(), ptrBytes.end());
+        _appendBytecode(byteCode);
+        --tok;
+        break;
+      }
+      case '-': {
+        /**
+          movabs [slot], %rax
+          subb $0x1, (%rax)
+         */
+        for (n = 0; *tok == '-'; ++n, ++tok);
+        const auto ptrBytes = _resolvePtrAddr(ptrAddr);
+        std::vector<uint8_t> byteCode { 
+          0x48, 0xb8, /* mem slot */ 
+          0x80, 0x28, static_cast<uint8_t>(n),
+        };
+        byteCode.insert(byteCode.begin() + 2, ptrBytes.begin(), ptrBytes.end());
+        _appendBytecode(byteCode);
+        --tok;
+        break;
+      }
+      // for '>' and '<', the memory addresses will be recorded.
+      case '>': {
+        for (n = 0; *tok == '>'; ++n, ++tok);
+        state->ptr += n;
+        --tok;  // counteract the tok++ in the main loop.
+        break;
+      }
+      case '<': {
+        for (n = 0; *tok == '<'; ++n, ++tok);
+        state->ptr -= n;
+        --tok;  // counteract the tok++ in the main loop.
+        break;
+      }
+      case ',': {
+        const auto ptrBytes = _resolvePtrAddr(ptrAddr);
+        std::vector<uint8_t> byteCode { 
+          0xb8, 0x3, 0x0, 0x0, 0x2,
+          0xbf, 0x0, 0x0, 0x0, 0x0,
+          0x48, 0xbe, /* mem slot */
+          0xba, 0x1, 0x0, 0x0, 0x0,
+          0xf, 0x5,
+        };
+        byteCode.insert(byteCode.begin() + 12, ptrBytes.begin(), ptrBytes.end());
+        _appendBytecode(byteCode);
+        break;
+      }
+      case '.': {
+        const auto ptrBytes = _resolvePtrAddr(ptrAddr);
+        std::vector<uint8_t> byteCode { 
+          0xb8, 0x4, 0x0, 0x0, 0x2,
+          0xbf, 0x1, 0x0, 0x0, 0x0,
+          0x48, 0xbe, /* mem slot */
+          0xba, 0x1, 0x0, 0x0, 0x0,
+          0xf, 0x5,
+        };
+        byteCode.insert(byteCode.begin() + 12, ptrBytes.begin(), ptrBytes.end());
+        _appendBytecode(byteCode);
+        break;
+      }
+      case '[': {
+        const auto ptrBytes = _resolvePtrAddr(ptrAddr);
+        std::vector<uint8_t> byteCode { 
+          0x48, 0xb8, /* mem slot */ 
+          0x80, 0x38, 0x0,
+          0xf, 0x84, 0x0, 0x0, 0x0, 0x0, /* near jmp */
+        };
+        byteCode.insert(byteCode.begin() + 2, ptrBytes.begin(), ptrBytes.end());
+        // record the jump relocation pos.
+        _appendBytecode(byteCode);
+        jmpLocIndex.push_back(machineCode.size());
+        break;
+      }
+      case ']': {
+        const auto ptrBytes = _resolvePtrAddr(ptrAddr);
+        std::vector<uint8_t> byteCode { 
+          0x48, 0xb8, /* mem slot */ 
+          0x80, 0x38, 0x0,
+          0xf, 0x85, 0x0, 0x0, 0x0, 0x0, /* near jmp */
+        };
+        byteCode.insert(byteCode.begin() + 2, ptrBytes.begin(), ptrBytes.end());
+        _appendBytecode(byteCode);
+
+        // relocation.
+        auto bDiff = _resolveAddrDiff(static_cast<uint32_t>(jmpLocIndex.back() - machineCode.size()));
+        auto fDiff = _resolveAddrDiff(static_cast<uint32_t>(machineCode.size() - jmpLocIndex.back()));
+
+        // relocate the last 4 bytes of the generated machine code.
+        machineCode.erase(machineCode.end() - 4, machineCode.end());
+        machineCode.insert(machineCode.end(), bDiff.begin(), bDiff.end());
+
+        // relocate the corresponding "[".
+        machineCode.erase(machineCode.begin() + jmpLocIndex.back() - 4, machineCode.begin() + jmpLocIndex.back());
+        machineCode.insert(machineCode.begin() + jmpLocIndex.back() - 4, fDiff.begin(), fDiff.end());
+        jmpLocIndex.pop_back();
+        break;
       }
     }
   }
+
+  /**
+    # Epilogue.
+    pop %rax
+    jmpq %rax  # return to normal C++ execution.
+   */
+  machineCode.push_back(0x58);
+  machineCode.push_back(0xff);
+  machineCode.push_back(0xe0);
 
   // dynamic execution.
   setupExecutableMem(&machineCode);
@@ -166,9 +284,6 @@ void bfInterpret(const char* program, bfState* state) {
         break;
       }
       case '\0': {
-#ifdef ENABLE_DEBUG
-        // debugTape(state->tape, 100);
-#endif
         return;
       }
     }
