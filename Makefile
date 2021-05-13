@@ -1,5 +1,5 @@
 CXX = clang++
-CXXFLAGS = -std=c++17
+CXXFLAGS = -std=c++17 -O2
 interpreter: interpreter.cc
 clean:
 	rm -f ./interpreter
