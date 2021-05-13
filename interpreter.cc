@@ -8,16 +8,6 @@
 #include <unistd.h>
 #include <cmath>
 
-/**
- * Some limitations of this program:
- * 
- * 1. No exception-handling support；
- * 2. No thread-safe guaranteed;
- * 3. The amount of consecutive "+", "-", "<" and ">" showing up in the source code cannot exceed 255;
- * 4. Only support macOS 64bit.
- * 
- */
-
 // #define ENABLE_DEBUG
 
 constexpr size_t TAPE_SIZE = 30000;
@@ -168,7 +158,11 @@ void bfJITCompile(std::vector<char>* program, bfState* state) {
       }
       case ',': {
         std::vector<uint8_t> byteCode { 
+#if __APPLE__
           0xb8, 0x3, 0x0, 0x0, 0x2,
+#elif __linux__
+          0xb8, 0x0, 0x0, 0x0, 0x0,
+#endif
           0xbf, 0x0, 0x0, 0x0, 0x0,
           0x48, 0x89, 0xde,
           0xba, 0x1, 0x0, 0x0, 0x0,
@@ -179,7 +173,11 @@ void bfJITCompile(std::vector<char>* program, bfState* state) {
       }
       case '.': {
         std::vector<uint8_t> byteCode { 
+#if __APPLE__
           0xb8, 0x4, 0x0, 0x0, 0x2,
+#elif __linux__
+          0xb8, 0x1, 0x0, 0x0, 0x0,
+#endif
           0xbf, 0x1, 0x0, 0x0, 0x0,
           0x48, 0x89, 0xde,
           0xba, 0x1, 0x0, 0x0, 0x0,
@@ -284,7 +282,7 @@ void bfInterpret(const char* program, bfState* state) {
       }
       case '[': {
         if (nloops == MAX_NESTING) std::terminate();
-        loops[nloops++] = program;
+        loops[nloops++] = program; 
         if (!*state->ptr) ++nskip;
         break;
       }
