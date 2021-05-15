@@ -19,7 +19,7 @@ make benchmark suite=mandelbrot
 * No fine-tuning of the generated assembly code.
 * Only implemented a simple `stdout` buffer.
 * The amount of consecutive "+", "-", "<" and ">" showing up in the source code cannot exceed 255, for "]", cannot exceed 23.
-* Only support X86-64 on macOS or Linux (maybe), but the compilation is highly dependent on the version of the compilers. **Some other optimization levels may fail** (unknown reason).
+* Only support X86-64 on macOS or Linux (need to compile with *-O0*, since the higher optimization flags may break the value passing of the `asm` block for unknown reasons).
 
 ### Benchmark Result
 

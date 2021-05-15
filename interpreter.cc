@@ -38,7 +38,7 @@ uint8_t* allocateExecMem(size_t size) {
 }
 
 // allocate executable memory.
-void setupExecutableMem(std::vector<uint8_t>* machineCode, size_t prependStaticSize) {
+void setupMemAndDynExec(std::vector<uint8_t>* machineCode, size_t prependStaticSize) {
   // get page size in bytes.
   auto pageSize = getpagesize();
   auto *mem = allocateExecMem(
@@ -48,7 +48,7 @@ void setupExecutableMem(std::vector<uint8_t>* machineCode, size_t prependStaticS
     std::cerr << "[error] can't allocate memory.\n"; 
     std::exit(1);
   }
-  
+
   for (size_t i = 0; i < machineCode->size(); ++i) {
     mem[i] = machineCode->at(i);
   }
@@ -84,6 +84,7 @@ void setupExecutableMem(std::vector<uint8_t>* machineCode, size_t prependStaticS
     popq %rax
   )");
   
+  // cleanup.
   std::free(stdoutBuf);
 }
 
@@ -133,8 +134,9 @@ void bfJITCompile(std::vector<char>* program, bfState* state) {
     byteCode.insert(byteCode.end() - offsetBytesFromLast, printCallOffset.begin(), printCallOffset.end());
   };
 
+  // contain static routine definitions.
   const std::vector<uint8_t> staticFuncBody {
-    // print function definition (current offset = 0).
+    // stdout function (current offset = 0).
     /**
       movl $0x2000004, %eax
       movl $0x1, %edi
@@ -329,7 +331,7 @@ void bfJITCompile(std::vector<char>* program, bfState* state) {
   _appendBytecode(byteCode, machineCode);
 
   // dynamic execution.
-  setupExecutableMem(&machineCode, staticFuncBody.size());
+  setupMemAndDynExec(&machineCode, staticFuncBody.size());
 }
 
 void bfInterpret(const char* program, bfState* state) {
