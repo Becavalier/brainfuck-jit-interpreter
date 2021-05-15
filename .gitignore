@@ -1,2 +1,4 @@
 interpreter
 interpreter.dSYM/
+.out_interpret
+.out_jit
