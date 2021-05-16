@@ -37,56 +37,60 @@ uint8_t* allocateExecMem(size_t size) {
       0));
 }
 
-// allocate executable memory.
-void setupMemAndDynExec(std::vector<uint8_t>* machineCode, size_t prependStaticSize) {
-  // get page size in bytes.
-  auto pageSize = getpagesize();
-  auto *mem = allocateExecMem(
-    static_cast<size_t>(std::ceil(machineCode->size() / static_cast<double>(pageSize)) * pageSize));
-
-  if (mem == MAP_FAILED) {
-    std::cerr << "[error] can't allocate memory.\n"; 
-    std::exit(1);
-  }
-
-  for (size_t i = 0; i < machineCode->size(); ++i) {
-    mem[i] = machineCode->at(i);
-  }
-
-  // setup a range of memory holding stdout buffer.
-  auto stdoutBuf = std::calloc(2048, sizeof(uint8_t));
+class VM {
+  uint8_t *mem = nullptr;
+  std::vector<uint8_t> *machineCode = nullptr;
+  void* stdoutBuf = nullptr;
+  size_t allocatedSize = 0;
+  size_t prependStaticSize = 0;
+ public:
+  VM(std::vector<uint8_t> *machineCode, size_t prependStaticSize) : 
+    machineCode(machineCode), prependStaticSize(prependStaticSize) {
+    auto pageSize = getpagesize();
+    allocatedSize = static_cast<size_t>(std::ceil(machineCode->size() / static_cast<double>(pageSize)) * pageSize);
+    mem = allocateExecMem(allocatedSize);
+    if (mem == MAP_FAILED) {
+      throw std::runtime_error("[error] can't allocate memory.");
+    }
+    std::memcpy(mem, machineCode->data(), machineCode->size());
   
-  // save the current %rip on stack (by PC-relative).
-  // %r10 - stdout buffer entry.
-  // %r11 - stdout buffer counter.
-  asm(R"(
-    pushq %%rax
-    pushq %%rbx
-    pushq %%r10
-    pushq %%r11
-    pushq %%r12
-    movq %1, %%r10
-    xorq %%r11, %%r11
-    lea 0xb(%%rip), %%rax 
-    pushq %%rax
-    movq %0, %%rax
-    addq %2, %%rax
-    jmpq *%%rax 
-  )":: "m" (mem), "m" (stdoutBuf), "m" (prependStaticSize));
+    // setup a range of memory holding stdout buffer.
+    stdoutBuf = std::calloc(2048, sizeof(uint8_t));
+  }
+  void exec() {
+    // save the current %rip on stack (by PC-relative).
+    // %r10 - stdout buffer entry.
+    // %r11 - stdout buffer counter.
+    asm(R"(
+      pushq %%rax
+      pushq %%rbx
+      pushq %%r10
+      pushq %%r11
+      pushq %%r12
+      movq %1, %%r10
+      xorq %%r11, %%r11
+      lea 0xe(%%rip), %%rax 
+      pushq %%rax
+      movq %0, %%rax
+      addq %2, %%rax
+      jmpq *%%rax 
+    )":: "m" (mem), "m" (stdoutBuf), "m" (prependStaticSize));
 
-  // clean the stack.
-  asm(R"(
-    addq $8, %rsp
-    popq %r12
-    popq %r11
-    popq %r10
-    popq %rbx
-    popq %rax
-  )");
-  
-  // cleanup.
-  std::free(stdoutBuf);
-}
+    // clean the stack.
+    asm(R"(
+      addq $8, %rsp
+      popq %r12
+      popq %r11
+      popq %r10
+      popq %rbx
+      popq %rax
+    )");
+  }
+  ~VM() {
+    std::free(stdoutBuf);
+    munmap(mem, allocatedSize);
+  }
+};
 
 // abstract machine model.
 struct bfState {
@@ -104,6 +108,7 @@ void bfJITCompile(std::vector<char>* program, bfState* state) {
   };
 
   auto _resolvePtrAddr = [](auto ptrAddr) -> auto {
+    // little-endian.
     return std::vector<uint8_t> {
       static_cast<uint8_t>(ptrAddr & 0xff),
       static_cast<uint8_t>((ptrAddr & 0xff00) >> 8),
@@ -117,6 +122,7 @@ void bfJITCompile(std::vector<char>* program, bfState* state) {
   };
 
   auto _resolveAddrDiff = [](auto addrDiff) -> auto {
+    // little-endian.
     return std::vector<uint8_t> {
       static_cast<uint8_t>(addrDiff & 0xff),
       static_cast<uint8_t>((addrDiff & 0xff00) >> 8),
@@ -331,7 +337,7 @@ void bfJITCompile(std::vector<char>* program, bfState* state) {
   _appendBytecode(byteCode, machineCode);
 
   // dynamic execution.
-  setupMemAndDynExec(&machineCode, staticFuncBody.size());
+  VM(&machineCode, staticFuncBody.size()).exec();
 }
 
 void bfInterpret(const char* program, bfState* state) {
