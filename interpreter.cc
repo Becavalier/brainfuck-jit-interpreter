@@ -2,6 +2,7 @@
 #include <fstream>
 #include <string>
 #include <vector>
+#include <cstring>
 #include <cstdio>
 #include <exception>
 #include <sys/mman.h>
@@ -70,12 +71,12 @@ class VM {
       pushq %%r12
       movq %1, %%r10
       xorq %%r11, %%r11
-      lea 0xe(%%rip), %%rax 
+      lea 0x9(%%rip), %%rax 
       pushq %%rax
       movq %0, %%rax
       addq %2, %%rax
       jmpq *%%rax 
-    )":: "m" (mem), "m" (stdoutBuf), "m" (prependStaticSize));
+    )":: "S" (mem), "m" (stdoutBuf), "D" (prependStaticSize));
 
     // clean the stack.
     asm(R"(
