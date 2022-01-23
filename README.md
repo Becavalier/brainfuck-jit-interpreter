@@ -3,7 +3,7 @@ A handwritten Brainfuck JIT interpreter, mainly used for demonstration purposes.
 
 ### How to use?
 
-*\* Please make sure you have installed `python` 3.75 or above and `clang++`*.
+*\* Please make sure you have installed `python` 3.75 or above and `clang++` / `g++`*.
 
 ```bash
 # run interpreter (with JIT or not).
@@ -19,7 +19,7 @@ make benchmark suite=mandelbrot
 * No fine-tuning of the generated assembly code.
 * Only implemented a simple `stdout` buffer.
 * The amount of consecutive "+", "-", "<" and ">" showing up in the source code cannot exceed 255, for "]", cannot exceed 23.
-* Only support X86-64 on macOS or Linux (need to compile with *-O0*, since the higher optimization flags may break the value passing of the `asm` block for unknown reasons).
+* Only support X86-64 on macOS and Linux.
 
 ### Benchmark Result
 
