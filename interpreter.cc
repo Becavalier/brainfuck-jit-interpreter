@@ -95,15 +95,15 @@ class VM {
 };
 
 // abstract machine model.
-struct bfState {
+struct BFState {
   unsigned char tape[TAPE_SIZE] = { 0 };
   unsigned char* ptr = nullptr;
-  bfState() {
+  BFState() {
     ptr = tape;
   }
 };
 
-void bfJITCompile(std::vector<char>* program, bfState* state) {
+void bfJITCompile(std::vector<char>* program, BFState* state) {
   // helpers.
   auto _appendBytecode = [](auto& byteCode, auto& machineCode) {
     machineCode.insert(machineCode.end(), byteCode.begin(), byteCode.end());
@@ -142,7 +142,7 @@ void bfJITCompile(std::vector<char>* program, bfState* state) {
     byteCode.insert(byteCode.end() - offsetBytesFromLast, printCallOffset.begin(), printCallOffset.end());
   };
 
-  // contain static routine definitions.
+  // static routine definitions.
   const std::vector<uint8_t> staticFuncBody {
     // stdout function (current offset = 0).
     /**
@@ -185,7 +185,6 @@ void bfJITCompile(std::vector<char>* program, bfState* state) {
     switch(*tok) {
       case '+': {
         for (n = 0; *tok == '+'; ++n, ++tok);
-        const auto ptrBytes = _resolvePtrAddr(ptrAddr);
         std::vector<uint8_t> byteCode { 
           0x80, 0x3, static_cast<uint8_t>(n),  // addb $0x1, (%rbx)
         };
@@ -195,7 +194,6 @@ void bfJITCompile(std::vector<char>* program, bfState* state) {
       } 
       case '-': {
         for (n = 0; *tok == '-'; ++n, ++tok);
-        const auto ptrBytes = _resolvePtrAddr(ptrAddr);
         std::vector<uint8_t> byteCode { 
           0x80, 0x2b, static_cast<uint8_t>(n),  // subb $0x1, (%rbx)
         };
@@ -342,7 +340,7 @@ void bfJITCompile(std::vector<char>* program, bfState* state) {
   VM(&machineCode, staticFuncBody.size()).exec();
 }
 
-void bfInterpret(const char* program, bfState* state) {
+void bfInterpret(const char* program, BFState* state) {
   const char* loops[MAX_NESTING];
   auto nloops = 0;
   auto nskip = 0;
@@ -404,13 +402,13 @@ void bfInterpret(const char* program, bfState* state) {
   }
 }
 
-inline void bfRunDefault(const char* sourceCode) {
-  bfState bfs;
+inline void bfRunInterpret(const char* sourceCode) {
+  BFState bfs;
   bfInterpret(sourceCode, &bfs);
 }
 
 inline void bfRunJIT(std::vector<char>* sourceCode) {
-  bfState bfs;
+  BFState bfs;
   bfJITCompile(sourceCode, &bfs);
 }
 
@@ -428,7 +426,7 @@ int main(int argc, char** argv) {
     if (argc > 2 && std::string(*(argv + 2)) == "--jit") {
       bfRunJIT(&v);
     } else {
-      bfRunDefault(v.data());
+      bfRunInterpret(v.data());
     }
   }
   return 0;
