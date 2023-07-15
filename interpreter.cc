@@ -11,6 +11,37 @@
 
 #define ENABLE_DEBUG
 
+#define CALLQ 0xe8
+#define SYSCALL 0xf, 0x5
+#define RETQ 0xc3
+#define MOV_EAX 0xb8
+#define MOV_EDX 0xba
+#define MOV_EDI 0xbf
+/* REX: 0x48, Op: 0xbb */
+#define MOV_RBX 0x48, 0xbb
+#define JE_SHORT 0x74
+#define JE_NEAR 0xf, 0x84
+#define JNE_NEAR 0xf, 0x85
+#define JNE 0x75
+/* Op: 0x80, ModR/M: 0x2b (MODRM.reg = 5) */
+#define SUBB_RBX 0x80, 0x2b
+/* Op: 0x80, ModR/M: 0x3 */
+#define ADDB_RBX 0x80, 0x3
+/* Op: 0xff, ModR/M: 0x24, SIB: 0x24 */
+#define JMPQ_RSP 0xff, 0x24, 0x24
+#define CMPB_RBX 0x80, 0x3b
+#define REX_SUB_RBX 0x48, 0x83, 0xeb
+#define REX_ADD_RBX 0x48, 0x83, 0xc3
+#define REX_MOV_R10_RSI 0x4c, 0x89, 0xd6
+#define REX_MOV_R11_RDX 0x4c, 0x89, 0xda
+#define REX_MOV_RBX_RSI 0x48, 0x89, 0xde
+#define REX_CMPD_R11 0x49, 0x83, 0xfb
+#define REX_MOVQ_RBX_R12 0x4c, 0x8b, 0x23
+#define REX_MOVQ_R12_R10_R11 0x4f, 0x89, 0x24, 0x1a
+#define REX_INCQ_R11 0x49, 0xff, 0xc3
+#define REX_CMPQ_R11 0x49, 0x81, 0xfb
+#define REX_XORQ_R11_R11 0x4d, 0x31, 0xdb
+
 constexpr size_t TAPE_SIZE = 30000;
 constexpr size_t MAX_NESTING = 100;
 
@@ -154,21 +185,21 @@ void bfJITCompile(std::vector<char>* program, BFState* state) {
       retq
     */
 #if __APPLE__
-    0xb8, 0x4, 0x0, 0x0, 0x2,
+    MOV_EAX, 0x4, 0x0, 0x0, 0x2,
 #elif __linux__
-    0xb8, 0x1, 0x0, 0x0, 0x0,
+    MOV_EAX, 0x1, 0x0, 0x0, 0x0,
 #endif
-    0xbf, 0x1, 0x0, 0x0, 0x0,
-    0x4c, 0x89, 0xd6,
-    0x4c, 0x89, 0xda,
-    0xf, 0x5,
-    0xc3,
+    MOV_EDI, 0x1, 0x0, 0x0, 0x0,
+    REX_MOV_R10_RSI,
+    REX_MOV_R11_RDX,
+    SYSCALL,
+    RETQ,
   };
 
   // prologue.
   std::vector<uint8_t> machineCode {
     // save dynamic pointer in %rbx.
-    0x48, 0xbb, /* mem slot */
+    MOV_RBX, /* mem slot */
   };
   std::vector<size_t> jmpLocIndex {};
 
@@ -186,7 +217,7 @@ void bfJITCompile(std::vector<char>* program, BFState* state) {
       case '+': {
         for (n = 0; *tok == '+'; ++n, ++tok);
         std::vector<uint8_t> byteCode { 
-          0x80, 0x3, static_cast<uint8_t>(n),  // addb $0x1, (%rbx)
+          ADDB_RBX, static_cast<uint8_t>(n),  // addb $0x1, (%rbx)
         };
         _appendBytecode(byteCode, machineCode);
         --tok;
@@ -195,7 +226,7 @@ void bfJITCompile(std::vector<char>* program, BFState* state) {
       case '-': {
         for (n = 0; *tok == '-'; ++n, ++tok);
         std::vector<uint8_t> byteCode { 
-          0x80, 0x2b, static_cast<uint8_t>(n),  // subb $0x1, (%rbx)
+          SUBB_RBX, static_cast<uint8_t>(n),  // subb $0x1, (%rbx)
         };
         _appendBytecode(byteCode, machineCode);
         --tok;
@@ -204,7 +235,7 @@ void bfJITCompile(std::vector<char>* program, BFState* state) {
       case '>': {
         for (n = 0; *tok == '>'; ++n, ++tok);
         std::vector<uint8_t> byteCode { 
-          0x48, 0x83, 0xc3, static_cast<uint8_t>(n),  // add $0x1, %rbx
+          REX_ADD_RBX, static_cast<uint8_t>(n),  // add $0x1, %rbx
         };
         _appendBytecode(byteCode, machineCode);
         --tok;  // counteract the tok++ in the main loop.
@@ -213,7 +244,7 @@ void bfJITCompile(std::vector<char>* program, BFState* state) {
       case '<': {
         for (n = 0; *tok == '<'; ++n, ++tok);
         std::vector<uint8_t> byteCode { 
-          0x48, 0x83, 0xeb, static_cast<uint8_t>(n),  // sub $0x1, %rbx
+          REX_SUB_RBX, static_cast<uint8_t>(n),  // sub $0x1, %rbx
         };
         _appendBytecode(byteCode, machineCode);
         --tok;  // counteract the tok++ in the main loop.
@@ -229,14 +260,14 @@ void bfJITCompile(std::vector<char>* program, BFState* state) {
         */
         std::vector<uint8_t> byteCode { 
 #if __APPLE__
-          0xb8, 0x3, 0x0, 0x0, 0x2,
+          MOV_EAX, 0x3, 0x0, 0x0, 0x2,
 #elif __linux__
-          0xb8, 0x0, 0x0, 0x0, 0x0,
+          MOV_EAX, 0x0, 0x0, 0x0, 0x0,
 #endif
-          0xbf, 0x0, 0x0, 0x0, 0x0,
-          0x48, 0x89, 0xde,
-          0xba, 0x1, 0x0, 0x0, 0x0,
-          0xf, 0x5,
+          MOV_EDI, 0x0, 0x0, 0x0, 0x0,
+          REX_MOV_RBX_RSI,
+          MOV_EDX, 0x1, 0x0, 0x0, 0x0,
+          SYSCALL,
         };
         _appendBytecode(byteCode, machineCode);
         break;
@@ -253,15 +284,15 @@ void bfJITCompile(std::vector<char>* program, BFState* state) {
         */
         std::vector<uint8_t> byteCode { 
           // setup a simple buffer for stdout.
-          0x4c, 0x8b, 0x23,
-          0x4f, 0x89, 0x24, 0x1a,
-          0x49, 0xff, 0xc3,
-          0x49, 0x81, 0xfb, 0x0, 0x4, 0x0, 0x0,
-          0x75, 0x8,
+          REX_MOVQ_RBX_R12,
+          REX_MOVQ_R12_R10_R11,
+          REX_INCQ_R11,
+          REX_CMPQ_R11, 0x0, 0x4, 0x0, 0x0,
+          JNE, 0x8,
           // flush.
-          0xe8, /* mem slot */
+          CALLQ, /* mem slot */
           // reset counter.
-          0x4d, 0x31, 0xdb,
+          REX_XORQ_R11_R11,
         };
         _relocateAddrOfPrintFunc(byteCode, machineCode, 3);
         _appendBytecode(byteCode, machineCode);
@@ -273,8 +304,8 @@ void bfJITCompile(std::vector<char>* program, BFState* state) {
           je <>
         */
         std::vector<uint8_t> byteCode { 
-          0x80, 0x3b, 0x0,
-          0xf, 0x84, 0x0, 0x0, 0x0, 0x0, /* near jmp */
+          CMPB_RBX, 0x0,
+          JE_NEAR, 0x0, 0x0, 0x0, 0x0, /* near jmp */
         };
         // record the jump relocation pos.
         _appendBytecode(byteCode, machineCode);
@@ -287,8 +318,8 @@ void bfJITCompile(std::vector<char>* program, BFState* state) {
           jne <>
         */
         std::vector<uint8_t> byteCode { 
-          0x80, 0x3b, 0x0,
-          0xf, 0x85, 0x0, 0x0, 0x0, 0x0, /* near jmp */
+          CMPB_RBX, 0x0,
+          JNE_NEAR, 0x0, 0x0, 0x0, 0x0, /* near jmp */
         };
         _appendBytecode(byteCode, machineCode);
 
@@ -328,10 +359,10 @@ void bfJITCompile(std::vector<char>* program, BFState* state) {
     jmpq *(%rsp)
    */
   std::vector<uint8_t> byteCode {
-    0x49, 0x83, 0xfb, 0x0,
-    0x74, 0x8,
-    0xe8, /* mem slot */
-    0xff, 0x24, 0x24,
+    REX_CMPD_R11, 0x0,
+    JE_SHORT, 0x8,
+    CALLQ, /* mem slot */
+    JMPQ_RSP,
   };
   _relocateAddrOfPrintFunc(byteCode, machineCode, 3);
   _appendBytecode(byteCode, machineCode);
